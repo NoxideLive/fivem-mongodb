@@ -20,6 +20,7 @@ Every callback accepts `success<boolean>` as its first argument. If `success` is
 
 Example (Lua):
 ```lua
+--Callback
 exports.mongodb:findOne({ collection = "users", query = { _id = id } }, function (success, result)
     if not success then
         print("Error message: "..tostring(result))
@@ -28,6 +29,16 @@ exports.mongodb:findOne({ collection = "users", query = { _id = id } }, function
 
     print("User name is "..tostring(result[1].name))
 end)
+
+--Async
+local success, result =  table.unpack(exports.mongodb:findOne({ collection = "users", query = { _id = id } }))
+
+if not success then
+    print("Error message: "..tostring(result))
+    return
+end
+
+print("User name is "..tostring(result[1].name))
 ```
 
 ## exports.mongodb.isConnected
@@ -35,7 +46,7 @@ end)
 
 Returns true if database connection is established.
 
-## exports.mongodb.insert(params, callback);
+## exports.mongodb.insert(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.documents<Object>` - an array of documents to insert
@@ -43,7 +54,7 @@ Returns true if database connection is established.
 * `callback(success<boolean>, insertedCount<number>, insertedIds<Array>)` - callback (optional)
 Inserts an array of documents into MongoDB.
 
-## exports.mongodb.insertOne(params, callback);
+## exports.mongodb.insertOne(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.document<Object>` - document object
@@ -52,7 +63,7 @@ Inserts an array of documents into MongoDB.
 
 Inserts a single document into MongoDB.
 
-## exports.mongodb.find(params, callback);
+## exports.mongodb.find(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -62,7 +73,7 @@ Inserts a single document into MongoDB.
 
 Performs a find query.
 
-## exports.mongodb.findOne(params, callback);
+## exports.mongodb.findOne(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -71,7 +82,7 @@ Performs a find query.
 
 Performns a find query with `limit = 1`.
 
-## exports.mongodb.update(params, callback);
+## exports.mongodb.update(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -81,7 +92,7 @@ Performns a find query with `limit = 1`.
 
 Update multiple documents on MongoDB.
 
-## exports.mongodb.updateOne(params, callback);
+## exports.mongodb.updateOne(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -91,7 +102,7 @@ Update multiple documents on MongoDB.
 
 Update a single document on MongoDB.
 
-## exports.mongodb.count(params, callback);
+## exports.mongodb.count(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -100,7 +111,7 @@ Update a single document on MongoDB.
 
 Gets the number of documents matching the filter.
 
-## exports.mongodb.delete(params, callback);
+## exports.mongodb.delete(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
@@ -109,7 +120,7 @@ Gets the number of documents matching the filter.
 
 Delete multiple documents on MongoDB.
 
-## exports.mongodb.deleteOne(params, callback);
+## exports.mongodb.deleteOne(params, callback?);
 * `params<Object>` - params object
 * `params.collection<string>` - collection name
 * `params.query<Object>` - filter query object
