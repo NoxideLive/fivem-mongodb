@@ -7,7 +7,7 @@ const dbName = GetConvar("mongodb_database", "changeme");
 let db;
 
 if (url != "changeme" && dbName != "changeme") {
-    mongodb.MongoClient.connect(url, { useNewUrlParser: true, useUnifiedTopology: true }, function (err, client) {
+    mongodb.MongoClient.connect(url, {useNewUrlParser: true, useUnifiedTopology: true}, function (err, client) {
         if (err) return console.log("[MongoDB][ERROR] Failed to connect: " + err.message);
         db = client.db(dbName);
 
@@ -27,6 +27,14 @@ function checkDatabaseReady() {
     return true;
 }
 
+function callbackOrElse(callback, ...everythingElse) {
+    if (callback) {
+        return utils.safeCallback(callback, ...everythingElse)
+    } else {
+        return everythingElse
+    }
+}
+
 function checkParams(params) {
     return params !== null && typeof params === 'object';
 }
@@ -44,7 +52,7 @@ function getParamsCollection(params) {
  * @param {Array}  params.documents - An array of documents to insert.
  * @param {Object} params.options - Options passed to insert.
  */
-function dbInsert(params, callback) {
+async function dbInsert(params, callback) {
     if (!checkDatabaseReady()) return;
     if (!checkParams(params)) return console.log(`[MongoDB][ERROR] exports.insert: Invalid params object.`);
 
@@ -56,13 +64,8 @@ function dbInsert(params, callback) {
         return console.log(`[MongoDB][ERROR] exports.insert: Invalid 'params.documents' value. Expected object or array of objects.`);
 
     const options = utils.safeObjectArgument(params.options);
-
-    collection.insertMany(documents, options, (err, result) => {
-        if (err) {
-            console.log(`[MongoDB][ERROR] exports.insert: Error "${err.message}".`);
-            utils.safeCallback(callback, false, err.message);
-            return;
-        }
+    try {
+        const result = await collection.insertMany(documents, options)
         let arrayOfIds = [];
         // Convert object to an array
         for (let key in result.insertedIds) {
@@ -70,19 +73,23 @@ function dbInsert(params, callback) {
                 arrayOfIds[parseInt(key)] = result.insertedIds[key].toString();
             }
         }
-        utils.safeCallback(callback, true, result.insertedCount, arrayOfIds);
-    });
-    process._tickCallback();
+        return callbackOrElse(callback, true, result.insertedCount, arrayOfIds)
+    } catch (err) {
+        console.log(`[MongoDB][ERROR] exports.insert: Error "${err.message}".`);
+        return callbackOrElse(callback, false, err.message)
+    }
 }
+
 
 /**
  * MongoDB find method
  * @param {Object} params - Params object
+ * @param callback
  * @param {Object} params.query - Query object.
  * @param {Object} params.options - Options passed to insert.
  * @param {number} params.limit - Limit documents count.
  */
-function dbFind(params, callback) {
+async function dbFind(params, callback) {
     if (!checkDatabaseReady()) return;
     if (!checkParams(params)) return console.log(`[MongoDB][ERROR] exports.find: Invalid params object.`);
 
@@ -91,57 +98,54 @@ function dbFind(params, callback) {
 
     const query = utils.safeObjectArgument(params.query);
     const options = utils.safeObjectArgument(params.options);
-
-    let cursor = collection.find(query, options);
-    if (params.limit) cursor = cursor.limit(params.limit);
-    cursor.toArray((err, documents) => {
-        if (err) {
-            console.log(`[MongoDB][ERROR] exports.find: Error "${err.message}".`);
-            utils.safeCallback(callback, false, err.message);
-            return;
-        };
-        utils.safeCallback(callback, true, utils.exportDocuments(documents));
-    });
-    process._tickCallback();
+    try {
+        let cursor = await collection.find(query, options);
+        if (params.limit) cursor = cursor.limit(params.limit);
+        const documents = await cursor.toArray();
+        return callbackOrElse(callback, true, utils.exportDocuments(documents))
+    } catch (err) {
+        console.log(`[MongoDB][ERROR] exports.find: Error "${err.message}".`);
+        return callbackOrElse(callback, false, err.message)
+    }
 }
 
 /**
  * MongoDB update method
  * @param {Object} params - Params object
+ * @param callback
+ * @param isUpdateOne
  * @param {Object} params.query - Filter query object.
  * @param {Object} params.update - Update query object.
  * @param {Object} params.options - Options passed to insert.
  */
-function dbUpdate(params, callback, isUpdateOne) {
+async function dbUpdate(params, callback, isUpdateOne) {
     if (!checkDatabaseReady()) return;
     if (!checkParams(params)) return console.log(`[MongoDB][ERROR] exports.update: Invalid params object.`);
 
     let collection = getParamsCollection(params);
     if (!collection) return console.log(`[MongoDB][ERROR] exports.insert: Invalid collection "${params.collection}"`);
 
-    query = utils.safeObjectArgument(params.query);
-    update = utils.safeObjectArgument(params.update);
-    options = utils.safeObjectArgument(params.options);
+    const query = utils.safeObjectArgument(params.query);
+    const update = utils.safeObjectArgument(params.update);
+    const options = utils.safeObjectArgument(params.options);
+    try {
+        const res = await (isUpdateOne ? collection.updateOne(query, update, options) : collection.updateMany(query, update, options));
+        return callbackOrElse(callback, true, res.result.nModified)
+    } catch (err) {
+        console.log(`[MongoDB][ERROR] exports.update: Error "${err.message}".`, params);
 
-    const cb = (err, res) => {
-        if (err) {
-            console.log(`[MongoDB][ERROR] exports.update: Error "${err.message}".`);
-            utils.safeCallback(callback, false, err.message);
-            return;
-        }
-        utils.safeCallback(callback, true, res.result.nModified);
-    };
-    isUpdateOne ? collection.updateOne(query, update, options, cb) : collection.updateMany(query, update, options, cb);
-    process._tickCallback();
+        return callbackOrElse(callback, false, err.message)
+    }
 }
 
 /**
  * MongoDB count method
  * @param {Object} params - Params object
+ * @param callback
  * @param {Object} params.query - Query object.
  * @param {Object} params.options - Options passed to insert.
  */
-function dbCount(params, callback) {
+async function dbCount(params, callback) {
     if (!checkDatabaseReady()) return;
     if (!checkParams(params)) return console.log(`[MongoDB][ERROR] exports.count: Invalid params object.`);
 
@@ -150,16 +154,13 @@ function dbCount(params, callback) {
 
     const query = utils.safeObjectArgument(params.query);
     const options = utils.safeObjectArgument(params.options);
-
-    collection.countDocuments(query, options, (err, count) => {
-        if (err) {
-            console.log(`[MongoDB][ERROR] exports.count: Error "${err.message}".`);
-            utils.safeCallback(callback, false, err.message);
-            return;
-        }
-        utils.safeCallback(callback, true, count);
-    });
-    process._tickCallback();
+    try {
+        const count = await collection.countDocuments(query, options)
+        return callbackOrElse(callback, true, count)
+    } catch (err) {
+        console.log(`[MongoDB][ERROR] exports.count: Error "${err.message}".`);
+        return callbackOrElse(callback, false, err.message)
+    }
 }
 
 /**
@@ -168,7 +169,7 @@ function dbCount(params, callback) {
  * @param {Object} params.query - Query object.
  * @param {Object} params.options - Options passed to insert.
  */
-function dbDelete(params, callback, isDeleteOne) {
+async function dbDelete(params, callback, isDeleteOne) {
     if (!checkDatabaseReady()) return;
     if (!checkParams(params)) return console.log(`[MongoDB][ERROR] exports.delete: Invalid params object.`);
 
@@ -178,45 +179,52 @@ function dbDelete(params, callback, isDeleteOne) {
     const query = utils.safeObjectArgument(params.query);
     const options = utils.safeObjectArgument(params.options);
 
-    const cb = (err, res) => {
-        if (err) {
-            console.log(`[MongoDB][ERROR] exports.delete: Error "${err.message}".`);
-            utils.safeCallback(callback, false, err.message);
-            return;
-        }
-        utils.safeCallback(callback, true, res.result.n);
-    };
-    isDeleteOne ? collection.deleteOne(query, options, cb) : collection.deleteMany(query, options, cb);
-    process._tickCallback();
+    try {
+        const res = await isDeleteOne ? collection.deleteOne(query, options) : collection.deleteMany(query, options);
+        return callbackOrElse(callback, true, res.result.n)
+    } catch (err) {
+        console.log(`[MongoDB][ERROR] exports.delete: Error "${err.message}".`);
+        return callbackOrElse(callback, false, err.message)
+    }
+}
+
+async function dbCollectionExists(collectionName, callback) {
+    if (!checkDatabaseReady()) return;
+
+    const result = await db.listCollections({name: collectionName}).toArray()
+    return callbackOrElse(callback, true, result.length > 0)
 }
 
 /* Exports definitions */
 
 exports("isConnected", () => !!db);
 
+exports("collectionExists", dbCollectionExists)
+
 exports("insert", dbInsert);
-exports("insertOne", (params, callback) => {
+exports("insertOne", async (params, callback) => {
     if (checkParams(params)) {
         params.documents = [params.document];
         params.document = null;
     }
-    return dbInsert(params, callback)
+    return await dbInsert(params, callback)
 });
 
+
 exports("find", dbFind);
-exports("findOne", (params, callback) => {
+exports("findOne", async (params, callback) => {
     if (checkParams(params)) params.limit = 1;
-    return dbFind(params, callback);
+    return await dbFind(params, callback);
 });
 
 exports("update", dbUpdate);
-exports("updateOne", (params, callback) => {
-    return dbUpdate(params, callback, true);
+exports("updateOne", async (params, callback) => {
+    return await dbUpdate(params, callback, true);
 });
 
 exports("count", dbCount);
 
 exports("delete", dbDelete);
-exports("deleteOne", (params, callback) => {
-    return dbDelete(params, callback, true);
+exports("deleteOne", async (params, callback) => {
+    return await dbDelete(params, callback, true);
 });
